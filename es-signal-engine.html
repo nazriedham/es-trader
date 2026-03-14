@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ES AI Signal Engine</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=Bebas+Neue&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:       #05080b;
+  --bg2:      #080d12;
+  --bg3:      #0b1219;
+  --panel:    #0d1520;
+  --border:   #162130;
+  --border2:  #1e3048;
+  --accent:   #00e5ff;
+  --accent2:  #00ff9d;
+  --red:      #ff2d55;
+  --warn:     #ffb800;
+  --dim:      #3a5a78;
+  --text:     #8ab4cc;
+  --bright:   #d0e8f8;
+  --glow:     0 0 24px rgba(0,229,255,0.25);
+  --glow-g:   0 0 24px rgba(0,255,157,0.25);
+  --glow-r:   0 0 24px rgba(255,45,85,0.25);
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+
+body {
+  background: var(--bg);
+  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* grid noise texture */
+body::after {
+  content:'';
+  position:fixed; inset:0;
+  background-image:
+    linear-gradient(rgba(0,229,255,0.012) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,255,0.012) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events:none; z-index:0;
+}
+
+/* scanlines */
+body::before {
+  content:'';
+  position:fixed; inset:0;
+  background: repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(0,0,0,0.04) 3px,rgba(0,0,0,0.04) 4px);
+  pointer-events:none; z-index:9999;
+}
+
+/* ── HEADER ── */
+header {
+  position: sticky; top:0; z-index:200;
+  background: rgba(5,8,11,0.95);
+  border-bottom: 1px solid var(--border2);
+  backdrop-filter: blur(12px);
+  display: flex; align-items:center; justify-content:space-between;
+  padding: 0 28px; height: 56px;
+}
+.logo {
+  font-family: 'Bebas Neue', sans-serif;
+  font-size: 26px; letter-spacing: 6px;
+  color: var(--accent);
+  text-shadow: var(--glow);
+}
+.logo em { color: var(--accent2); font-style:normal; }
+.header-right { display:flex; gap:28px; align-items:center; }
+.hstat { text-align:right; }
+.hstat-label { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--dim); }
+.hstat-val { font-family:'IBM Plex Mono',monospace; font-size:14px; color:var(--bright); }
+.hstat-val.up { color:var(--accent2); }
+.hstat-val.dn { color:var(--red); }
+#clock { font-family:'IBM Plex Mono',monospace; font-size:20px; color:var(--accent); letter-spacing:2px; }
+.session-pill {
+  font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:3px;
+  padding:3px 10px; border-radius:20px;
+  border:1px solid var(--accent2); color:var(--accent2);
+  background:rgba(0,255,157,0.08);
+}
+.session-pill.closed { border-color:var(--red); color:var(--red); background:rgba(255,45,85,0.08); }
+
+/* ── LAYOUT ── */
+.app { display:grid; grid-template-columns: 400px 1fr; height:calc(100vh - 56px); position:relative; z-index:1; }
+
+/* ── LEFT PANEL — INPUT FORM ── */
+.left-panel {
+  border-right:1px solid var(--border2);
+  overflow-y:auto; background:var(--bg2);
+  display:flex; flex-direction:column;
+}
+.left-panel::-webkit-scrollbar { width:4px; }
+.left-panel::-webkit-scrollbar-thumb { background:var(--border2); }
+
+.form-section { padding:18px 20px; border-bottom:1px solid var(--border); }
+.section-tag {
+  font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:4px;
+  color:var(--accent); margin-bottom:12px; display:flex; align-items:center; gap:8px;
+}
+.section-tag::after { content:''; flex:1; height:1px; background:var(--border2); }
+
+/* fields */
+.field { margin-bottom:10px; }
+.field label { font-size:10px; letter-spacing:2px; color:var(--dim); display:block; margin-bottom:4px; font-family:'IBM Plex Mono',monospace; }
+.field input, .field select, .field textarea {
+  width:100%; background:var(--bg3); border:1px solid var(--border);
+  color:var(--bright); padding:8px 11px; border-radius:3px;
+  font-family:'IBM Plex Mono',monospace; font-size:13px;
+  outline:none; transition:border-color 0.2s;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color:var(--accent); }
+.field select option { background:var(--bg3); }
+.field textarea { resize:none; height:60px; }
+.row2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+.row3 { display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; }
+
+/* toggle chips */
+.toggle-group { display:flex; flex-wrap:wrap; gap:5px; }
+.tgl {
+  padding:5px 11px; border:1px solid var(--border); border-radius:2px;
+  font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:1px;
+  cursor:pointer; color:var(--dim); transition:all 0.15s; background:var(--bg3);
+}
+.tgl:hover { border-color:var(--accent); color:var(--accent); }
+.tgl.on { border-color:var(--accent); color:var(--accent); background:rgba(0,229,255,0.1); }
+
+/* mindset slider */
+.mood-track { position:relative; margin:8px 0; }
+.mood-track input[type=range] {
+  -webkit-appearance:none; width:100%; height:4px;
+  background:linear-gradient(90deg, var(--red), var(--warn), var(--accent2));
+  border:none; border-radius:2px; padding:0; cursor:pointer;
+}
+.mood-track input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance:none; width:16px; height:16px; border-radius:50%;
+  background:var(--bright); border:2px solid var(--accent); cursor:pointer;
+}
+.mood-labels { display:flex; justify-content:space-between; font-family:'IBM Plex Mono',monospace; font-size:9px; color:var(--dim); margin-top:4px; }
+
+/* generate button */
+.gen-btn {
+  margin:16px 20px;
+  width:calc(100% - 40px);
+  padding:14px;
+  background:linear-gradient(135deg, rgba(0,229,255,0.2), rgba(0,255,157,0.15));
+  border:1px solid var(--accent);
+  color:var(--accent);
+  font-family:'Bebas Neue',sans-serif; font-size:20px; letter-spacing:5px;
+  cursor:pointer; border-radius:3px; transition:all 0.2s;
+  text-shadow:var(--glow); box-shadow:var(--glow);
+}
+.gen-btn:hover { background:linear-gradient(135deg, rgba(0,229,255,0.35), rgba(0,255,157,0.25)); box-shadow:0 0 40px rgba(0,229,255,0.4); }
+.gen-btn:disabled { opacity:0.4; cursor:not-allowed; }
+
+/* ── RIGHT PANEL — SIGNAL OUTPUT ── */
+.right-panel { overflow-y:auto; background:var(--bg); display:flex; flex-direction:column; }
+.right-panel::-webkit-scrollbar { width:4px; }
+.right-panel::-webkit-scrollbar-thumb { background:var(--border2); }
+
+/* IDLE STATE */
+.idle-state {
+  flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:16px; opacity:0.35;
+}
+.idle-icon { font-size:64px; }
+.idle-text { font-family:'Bebas Neue',sans-serif; font-size:28px; letter-spacing:6px; color:var(--accent); }
+.idle-sub { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:2px; color:var(--dim); text-align:center; }
+
+/* SIGNAL CARD */
+.signal-wrap { padding:20px; display:flex; flex-direction:column; gap:14px; }
+
+/* direction banner */
+.dir-banner {
+  border-radius:4px; padding:18px 24px;
+  display:flex; align-items:center; justify-content:space-between;
+  position:relative; overflow:hidden;
+}
+.dir-banner.long { background:linear-gradient(135deg,rgba(0,255,157,0.12),rgba(0,229,255,0.08)); border:1px solid rgba(0,255,157,0.4); }
+.dir-banner.short { background:linear-gradient(135deg,rgba(255,45,85,0.12),rgba(255,184,0,0.06)); border:1px solid rgba(255,45,85,0.4); }
+.dir-banner.nogo { background:linear-gradient(135deg,rgba(255,184,0,0.1),rgba(255,45,85,0.08)); border:1px solid rgba(255,184,0,0.4); }
+.dir-main { display:flex; flex-direction:column; gap:4px; }
+.dir-label { font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:4px; opacity:0.6; }
+.dir-value { font-family:'Bebas Neue',sans-serif; font-size:52px; line-height:1; letter-spacing:4px; }
+.dir-banner.long .dir-value { color:var(--accent2); text-shadow:var(--glow-g); }
+.dir-banner.short .dir-value { color:var(--red); text-shadow:var(--glow-r); }
+.dir-banner.nogo .dir-value { color:var(--warn); }
+.dir-setup { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text); }
+
+/* confidence ring */
+.conf-ring { text-align:center; }
+.ring-svg { transform:rotate(-90deg); }
+.ring-track { fill:none; stroke:var(--border2); stroke-width:6; }
+.ring-fill { fill:none; stroke-width:6; stroke-linecap:round; transition:stroke-dashoffset 1s ease; }
+.ring-fill.high { stroke:var(--accent2); }
+.ring-fill.mid  { stroke:var(--warn); }
+.ring-fill.low  { stroke:var(--red); }
+.ring-center { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; }
+.ring-wrap { position:relative; width:90px; height:90px; }
+.conf-pct { font-family:'Bebas Neue',sans-serif; font-size:28px; }
+.conf-lbl { font-family:'IBM Plex Mono',monospace; font-size:8px; letter-spacing:2px; color:var(--dim); }
+
+/* levels grid */
+.levels-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; }
+.level-card {
+  background:var(--panel); border:1px solid var(--border);
+  border-radius:3px; padding:12px 14px; text-align:center;
+}
+.level-card.entry { border-color:var(--accent); }
+.level-card.stop  { border-color:rgba(255,45,85,0.5); }
+.level-card.t1    { border-color:rgba(0,255,157,0.3); }
+.level-card.t2    { border-color:rgba(0,255,157,0.5); }
+.level-card.t3    { border-color:rgba(0,255,157,0.7); }
+.lc-label { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--dim); margin-bottom:6px; }
+.lc-val   { font-family:'IBM Plex Mono',monospace; font-size:17px; color:var(--bright); }
+.lc-sub   { font-family:'IBM Plex Mono',monospace; font-size:10px; margin-top:3px; }
+.level-card.entry .lc-val { color:var(--accent); }
+.level-card.stop  .lc-val { color:var(--red); }
+.level-card.t1 .lc-val,.level-card.t2 .lc-val,.level-card.t3 .lc-val { color:var(--accent2); }
+
+/* info panels */
+.info-row { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+.info-box { background:var(--panel); border:1px solid var(--border); border-radius:3px; padding:14px; }
+.info-box-title { font-family:'IBM Plex Mono',monospace; font-size:9px; letter-spacing:3px; color:var(--accent); margin-bottom:10px; }
+.info-item { display:flex; justify-content:space-between; align-items:center; padding:5px 0; border-bottom:1px solid var(--border); }
+.info-item:last-child { border-bottom:none; }
+.info-key { font-size:11px; color:var(--dim); font-family:'IBM Plex Mono',monospace; }
+.info-val { font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--bright); }
+.info-val.green { color:var(--accent2); }
+.info-val.red   { color:var(--red); }
+.info-val.warn  { color:var(--warn); }
+
+/* reasoning box */
+.reasoning-box { background:var(--panel); border:1px solid var(--border); border-radius:3px; padding:16px; }
+.reasoning-box .info-box-title { margin-bottom:10px; }
+.reasoning-text { font-size:14px; line-height:1.7; color:var(--text); }
+.reasoning-text strong { color:var(--bright); font-weight:600; }
+
+/* invalidation */
+.inval-box { background:rgba(255,45,85,0.05); border:1px solid rgba(255,45,85,0.25); border-radius:3px; padding:14px; }
+.inval-box .info-box-title { color:var(--red); }
+.inval-list { list-style:none; display:flex; flex-direction:column; gap:6px; }
+.inval-list li { font-family:'IBM Plex Mono',monospace; font-size:12px; padding-left:16px; position:relative; }
+.inval-list li::before { content:'⚠'; position:absolute; left:0; font-size:10px; color:var(--warn); }
+
+/* management steps */
+.mgmt-steps { display:flex; flex-direction:column; gap:6px; }
+.mgmt-step { display:flex; gap:10px; align-items:flex-start; padding:8px 10px; background:var(--bg3); border-radius:3px; border-left:2px solid var(--accent); }
+.step-num { font-family:'Bebas Neue',sans-serif; font-size:16px; color:var(--accent); min-width:20px; }
+.step-text { font-size:13px; line-height:1.5; }
+
+/* loading */
+.loading-state { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:20px; }
+.scanner-ring { width:80px; height:80px; border:2px solid var(--border2); border-top-color:var(--accent); border-radius:50%; animation:spin 0.8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.loading-text { font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:3px; color:var(--accent); }
+.loading-steps { font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--dim); text-align:center; line-height:2; }
+
+/* history strip */
+.history-strip { display:flex; gap:6px; padding:12px 20px; border-top:1px solid var(--border); background:var(--bg2); flex-wrap:wrap; }
+.hist-chip {
+  padding:4px 12px; border-radius:2px; font-family:'IBM Plex Mono',monospace; font-size:10px;
+  cursor:pointer; border:1px solid var(--border); color:var(--dim);
+  transition:all 0.15s;
+}
+.hist-chip:hover { border-color:var(--accent); color:var(--accent); }
+.hist-chip.long-chip { border-color:rgba(0,255,157,0.3); color:var(--accent2); }
+.hist-chip.short-chip { border-color:rgba(255,45,85,0.3); color:var(--red); }
+.hist-chip.nogo-chip { border-color:rgba(255,184,0,0.3); color:var(--warn); }
+
+/* pulse dot */
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1);} 50%{opacity:0.5;transform:scale(0.8);} }
+.live-dot { width:7px;height:7px;border-radius:50%;background:var(--accent2);display:inline-block;animation:pulse 1.5s infinite;margin-right:6px; }
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header>
+  <div class="logo">ES <em>/</em> SIGNAL ENGINE</div>
+  <div class="header-right">
+    <div class="hstat"><div class="hstat-label">SIGNALS TODAY</div><div class="hstat-val" id="h-count">0</div></div>
+    <div class="hstat"><div class="hstat-label">AVG CONFIDENCE</div><div class="hstat-val" id="h-conf">–</div></div>
+    <div>
+      <div id="clock">--:--:--</div>
+      <div id="session-pill" class="session-pill" style="margin-top:3px;text-align:right;">LOADING</div>
+    </div>
+  </div>
+</header>
+
+<div class="app">
+
+  <!-- ══ LEFT: INPUT FORM ══ -->
+  <div class="left-panel">
+
+    <!-- PRICE & VWAP -->
+    <div class="form-section">
+      <div class="section-tag">01 · PRICE & VWAP</div>
+      <div class="row2">
+        <div class="field"><label>ES CURRENT PRICE</label><input type="number" id="f-price" placeholder="5780.25" step="0.25"></div>
+        <div class="field"><label>VWAP</label><input type="number" id="f-vwap" placeholder="5775.50" step="0.25"></div>
+      </div>
+      <div class="row3">
+        <div class="field"><label>VWAP +1SD</label><input type="number" id="f-v1u" placeholder="5790.00" step="0.25"></div>
+        <div class="field"><label>VWAP -1SD</label><input type="number" id="f-v1d" placeholder="5761.00" step="0.25"></div>
+        <div class="field"><label>VWAP +2SD</label><input type="number" id="f-v2u" placeholder="5804.50" step="0.25"></div>
+      </div>
+      <div class="field">
+        <label>PRICE vs VWAP</label>
+        <select id="f-vwap-pos">
+          <option value="">– select –</option>
+          <option>Above VWAP — bullish bias</option>
+          <option>Below VWAP — bearish bias</option>
+          <option>At VWAP — neutral/chop</option>
+          <option>Reclaiming VWAP from below</option>
+          <option>Losing VWAP from above</option>
+          <option>Bouncing off VWAP (held)</option>
+          <option>Rejected at VWAP (rejected)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- KEY LEVELS -->
+    <div class="form-section">
+      <div class="section-tag">02 · KEY S/R LEVELS</div>
+      <div class="row2">
+        <div class="field"><label>PREV DAY HIGH (PDH)</label><input type="number" id="f-pdh" placeholder="5792.00" step="0.25"></div>
+        <div class="field"><label>PREV DAY LOW (PDL)</label><input type="number" id="f-pdl" placeholder="5758.00" step="0.25"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>TODAY HOD</label><input type="number" id="f-hod" placeholder="5788.50" step="0.25"></div>
+        <div class="field"><label>TODAY LOD</label><input type="number" id="f-lod" placeholder="5764.00" step="0.25"></div>
+      </div>
+      <div class="row2">
+        <div class="field"><label>NEAREST SUPPORT</label><input type="number" id="f-sup" placeholder="5770.00" step="0.25"></div>
+        <div class="field"><label>NEAREST RESISTANCE</label><input type="number" id="f-res" placeholder="5790.00" step="0.25"></div>
+      </div>
+      <div class="field"><label>OPEN PRICE (RTH)</label><input type="number" id="f-open" placeholder="5774.00" step="0.25"></div>
+    </div>
+
+    <!-- MARKET STRUCTURE -->
+    <div class="form-section">
+      <div class="section-tag">03 · MARKET STRUCTURE</div>
+      <div class="field">
+        <label>TREND STRUCTURE</label>
+        <select id="f-trend">
+          <option value="">– select –</option>
+          <option>Strong uptrend — HH/HL sequence</option>
+          <option>Strong downtrend — LH/LL sequence</option>
+          <option>Ranging / Choppy — no clear direction</option>
+          <option>Possible reversal — structure breaking</option>
+          <option>Consolidating after move up</option>
+          <option>Consolidating after move down</option>
+          <option>Opening range forming</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>SESSION PHASE</label>
+        <select id="f-phase">
+          <option value="">– select –</option>
+          <option>Opening drive 9:30–10:00am</option>
+          <option>Morning continuation 10:00–11:30am</option>
+          <option>Midday lull 11:30am–1:00pm</option>
+          <option>Afternoon trend 1:00–3:00pm</option>
+          <option>Power hour 3:00–4:00pm</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>VOLUME CHARACTERISTIC</label>
+        <select id="f-volume">
+          <option value="">– select –</option>
+          <option>Above average — strong participation</option>
+          <option>Below average — thin market</option>
+          <option>Declining on rally — weak buying</option>
+          <option>Expanding on breakdown — sellers in control</option>
+          <option>High volume spike at level — absorption?</option>
+          <option>Normal average volume</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- ORDER FLOW -->
+    <div class="form-section">
+      <div class="section-tag">04 · ORDER FLOW / TAPE</div>
+      <div class="field">
+        <label>DOM / BID-ASK PRESSURE</label>
+        <select id="f-dom">
+          <option value="">– select –</option>
+          <option>Heavy bid stacking — buyers aggressive</option>
+          <option>Heavy ask stacking — sellers aggressive</option>
+          <option>Balanced DOM — no clear edge</option>
+          <option>Bid pulling on rally — fake strength</option>
+          <option>Ask pulling on selloff — fake weakness</option>
+          <option>Large iceberg bid at level</option>
+          <option>Large iceberg ask at level</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>DELTA / FOOTPRINT OBSERVATION</label>
+        <select id="f-delta">
+          <option value="">– select –</option>
+          <option>Positive delta — buyers winning</option>
+          <option>Negative delta — sellers winning</option>
+          <option>Delta divergence — price up, delta down</option>
+          <option>Delta divergence — price down, delta up</option>
+          <option>Absorption at highs — selling into rally</option>
+          <option>Absorption at lows — buying into selloff</option>
+          <option>No footprint data available</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>OBSERVED SETUP / PATTERN</label>
+        <div class="toggle-group" id="setup-toggles">
+          <div class="tgl" onclick="tgl(this)">Opening Drive</div>
+          <div class="tgl" onclick="tgl(this)">VWAP Reclaim</div>
+          <div class="tgl" onclick="tgl(this)">VWAP Rejection</div>
+          <div class="tgl" onclick="tgl(this)">Break & Retest</div>
+          <div class="tgl" onclick="tgl(this)">Failed Auction</div>
+          <div class="tgl" onclick="tgl(this)">Liq. Sweep Long</div>
+          <div class="tgl" onclick="tgl(this)">Liq. Sweep Short</div>
+          <div class="tgl" onclick="tgl(this)">PDH Breakout</div>
+          <div class="tgl" onclick="tgl(this)">PDL Breakdown</div>
+          <div class="tgl" onclick="tgl(this)">HOD/LOD Test</div>
+          <div class="tgl" onclick="tgl(this)">Gap Fill</div>
+          <div class="tgl" onclick="tgl(this)">Order Block</div>
+        </div>
+      </div>
+      <div class="field">
+        <label>CANDLE PATTERN (last 2-3 bars)</label>
+        <select id="f-candle">
+          <option value="">– select –</option>
+          <option>Strong bull bar closing near high</option>
+          <option>Strong bear bar closing near low</option>
+          <option>Doji / indecision at level</option>
+          <option>Hammer / pin bar (bullish reversal)</option>
+          <option>Shooting star (bearish reversal)</option>
+          <option>Inside bar — compression</option>
+          <option>Outside bar — volatility expansion</option>
+          <option>Bull engulfing</option>
+          <option>Bear engulfing</option>
+          <option>3 push exhaustion (up)</option>
+          <option>3 push exhaustion (down)</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- MACRO / NEWS -->
+    <div class="form-section">
+      <div class="section-tag">05 · MACRO CONDITIONS</div>
+      <div class="field">
+        <label>ECONOMIC EVENTS (today)</label>
+        <select id="f-news">
+          <option>No major events — clean tape</option>
+          <option>CPI / Inflation data</option>
+          <option>FOMC / Fed speaker</option>
+          <option>NFP / Jobs report</option>
+          <option>PPI / PCE data</option>
+          <option>GDP release</option>
+          <option>Other high-impact event</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>OVERALL MARKET SENTIMENT</label>
+        <select id="f-sentiment">
+          <option value="">– select –</option>
+          <option>Risk-on — equities bid, VIX falling</option>
+          <option>Risk-off — selling pressure, VIX rising</option>
+          <option>Neutral — mixed signals</option>
+          <option>Post-news volatility fading</option>
+          <option>Pre-news caution — low volume</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- TRADER STATE — only manual input -->
+    <div class="form-section">
+      <div class="section-tag">06 · YOUR STATE <span style="color:var(--dim);letter-spacing:1px;font-size:9px">← YOU INPUT THIS</span></div>
+      <div class="field">
+        <label>MENTAL CLARITY (drag)</label>
+        <div class="mood-track">
+          <input type="range" id="f-mood" min="1" max="10" value="7" oninput="updateMood()">
+          <div class="mood-labels"><span>Foggy/Emotional</span><span id="mood-val" style="color:var(--bright)">7 — Focused</span><span>Peak Focus</span></div>
+        </div>
+      </div>
+      <div class="field">
+        <label>CURRENT SESSION P&L</label>
+        <input type="text" id="f-pnl" placeholder="e.g. +$250 or -$150">
+      </div>
+      <div class="field">
+        <label>EMOTIONAL STATE</label>
+        <select id="f-emotion">
+          <option value="">– select –</option>
+          <option>Calm and neutral — best state</option>
+          <option>Confident (based on process)</option>
+          <option>Slightly anxious — manageable</option>
+          <option>Frustrated after losses</option>
+          <option>Overconfident after wins</option>
+          <option>FOMO — feeling left out</option>
+          <option>Revenge mindset — danger zone</option>
+          <option>Distracted / low energy</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>ANYTHING ELSE THE AI SHOULD KNOW</label>
+        <textarea id="f-extra" placeholder="e.g. I have 2 trades left before daily max loss, market feels slow today, I've been early on entries..."></textarea>
+      </div>
+    </div>
+
+    <button class="gen-btn" id="gen-btn" onclick="generateSignal()">⚡ GENERATE SIGNAL</button>
+    <div style="height:8px;"></div>
+  </div>
+
+  <!-- ══ RIGHT: SIGNAL OUTPUT ══ -->
+  <div class="right-panel" id="right-panel">
+    <div class="idle-state" id="idle-state">
+      <div class="idle-icon">📡</div>
+      <div class="idle-text">SIGNAL ENGINE READY</div>
+      <div class="idle-sub">Fill in the market context on the left<br>and hit GENERATE SIGNAL</div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ── CLOCK ──
+function tick() {
+  const now = new Date();
+  const et = new Date(now.toLocaleString('en-US',{timeZone:'America/New_York'}));
+  const pad = n => String(n).padStart(2,'0');
+  document.getElementById('clock').textContent = `${pad(et.getHours())}:${pad(et.getMinutes())}:${pad(et.getSeconds())} ET`;
+  const t = et.getHours()*60+et.getMinutes();
+  const pill = document.getElementById('session-pill');
+  if(t>=570&&t<960){ pill.textContent='● RTH OPEN'; pill.className='session-pill'; }
+  else if(t>=540&&t<570){ pill.textContent='◌ PRE-MARKET'; pill.className='session-pill'; }
+  else { pill.textContent='○ CLOSED'; pill.className='session-pill closed'; }
+}
+setInterval(tick,1000); tick();
+
+// ── MOOD ──
+const moodLabels = ['','Panicking','Very Anxious','Anxious','Nervous','Slightly Off','Neutral','Focused','Sharp','In The Zone','Peak Focus'];
+function updateMood(){
+  const v = document.getElementById('f-mood').value;
+  document.getElementById('mood-val').textContent = v+' — '+moodLabels[v];
+}
+updateMood();
+
+// ── SETUP TOGGLES ──
+function tgl(el){ el.classList.toggle('on'); }
+function getSetups(){ return [...document.querySelectorAll('#setup-toggles .tgl.on')].map(e=>e.textContent).join(', ') || 'None selected'; }
+
+// ── SIGNAL HISTORY ──
+let signalHistory = [];
+let signals = [];
+let confList = [];
+
+// ── GENERATE SIGNAL ──
+async function generateSignal() {
+  const btn = document.getElementById('gen-btn');
+  btn.disabled = true; btn.textContent = 'SCANNING MARKET...';
+
+  // Collect all form data
+  const ctx = {
+    price:      document.getElementById('f-price').value,
+    vwap:       document.getElementById('f-vwap').value,
+    vwapPos:    document.getElementById('f-vwap-pos').value,
+    v1u:        document.getElementById('f-v1u').value,
+    v1d:        document.getElementById('f-v1d').value,
+    v2u:        document.getElementById('f-v2u').value,
+    pdh:        document.getElementById('f-pdh').value,
+    pdl:        document.getElementById('f-pdl').value,
+    hod:        document.getElementById('f-hod').value,
+    lod:        document.getElementById('f-lod').value,
+    support:    document.getElementById('f-sup').value,
+    resistance: document.getElementById('f-res').value,
+    open:       document.getElementById('f-open').value,
+    trend:      document.getElementById('f-trend').value,
+    phase:      document.getElementById('f-phase').value,
+    volume:     document.getElementById('f-volume').value,
+    dom:        document.getElementById('f-dom').value,
+    delta:      document.getElementById('f-delta').value,
+    setups:     getSetups(),
+    candle:     document.getElementById('f-candle').value,
+    news:       document.getElementById('f-news').value,
+    sentiment:  document.getElementById('f-sentiment').value,
+    mood:       document.getElementById('f-mood').value + ' — ' + moodLabels[document.getElementById('f-mood').value],
+    emotion:    document.getElementById('f-emotion').value,
+    pnl:        document.getElementById('f-pnl').value,
+    extra:      document.getElementById('f-extra').value,
+  };
+
+  showLoading();
+
+  const prompt = buildPrompt(ctx);
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: SYSTEM,
+        messages: [{ role:'user', content: prompt }]
+      })
+    });
+    const data = await res.json();
+    const raw = data.content?.map(b=>b.text||'').join('') || '';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    let signal;
+    try { signal = JSON.parse(clean); } catch(e) { signal = { error: raw }; }
+    renderSignal(signal, ctx);
+  } catch(e) {
+    renderError(e.message);
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ GENERATE SIGNAL';
+}
+
+// ── SYSTEM PROMPT ──
+const SYSTEM = `You are an elite ES (E-mini S&P 500) futures scalping signal engine. You analyze detailed market context and output precise, actionable trading signals for a professional RTH scalper.
+
+Your signals cover these setups: Opening Drive, VWAP Reclaim/Rejection, Break & Retest, Failed Auction, Liquidity Sweep, Order Block entries.
+
+ES specs: $50/point, $12.50/tick (0.25pt). RTH = 9:30am-4:00pm ET.
+
+CRITICAL RULES:
+- If trader mindset is revenge/FOMO/overconfident → output NO-GO signal regardless of market
+- If emotional state is "danger zone" → output NO-GO  
+- Stops must be logical (behind structure, VWAP, key level) not arbitrary
+- Targets must be at natural levels (VWAP, S/R, SD bands, HOD/LOD)
+- During midday lull (11:30-1pm) → be very selective, tighten targets
+- If no clear setup exists → say NO-GO, never force a trade
+- Confidence = your honest % that this trade reaches T1 given ALL context
+
+Respond ONLY with valid JSON, no other text:
+{
+  "direction": "LONG" | "SHORT" | "NO-GO",
+  "setup": "name of the primary setup",
+  "confidence": 0-100,
+  "confidenceLabel": "HIGH" | "MODERATE" | "LOW",
+  "entry": { "zone": "e.g. 5778.50-5780.00", "idealEntry": 5779.25, "entryLogic": "why this entry" },
+  "stop": { "price": 5775.00, "points": 4.25, "logic": "why this stop" },
+  "targets": [
+    { "label": "T1", "price": 5784.00, "points": 4.75, "rr": "1.1R", "action": "take 50% off" },
+    { "label": "T2", "price": 5788.50, "points": 9.25, "rr": "2.2R", "action": "take 30% off" },
+    { "label": "T3", "price": 5793.00, "points": 13.75, "rr": "3.2R", "action": "trail remainder" }
+  ],
+  "tradeManagement": ["step1","step2","step3"],
+  "reasoning": "2-3 sentence detailed explanation of WHY this signal, referencing specific levels and context",
+  "invalidation": ["condition1 that cancels the trade", "condition2", "condition3"],
+  "mindsetNote": "personal note to the trader about their current state — be direct",
+  "noGoReason": "only if NO-GO: explain exactly why no trade now"
+}`;
+
+function buildPrompt(c) {
+  return `Analyze this ES market context and generate a precise scalping signal:
+
+PRICE ACTION:
+- Current ES price: ${c.price || 'not provided'}
+- VWAP: ${c.vwap || 'not provided'} | Position: ${c.vwapPos || 'not selected'}
+- VWAP +1SD: ${c.v1u} | VWAP -1SD: ${c.v1d} | VWAP +2SD: ${c.v2u}
+
+KEY LEVELS:
+- PDH: ${c.pdh} | PDL: ${c.pdl}
+- Today HOD: ${c.hod} | LOD: ${c.lod}
+- RTH Open: ${c.open}
+- Nearest Support: ${c.support} | Resistance: ${c.resistance}
+
+MARKET STRUCTURE:
+- Trend: ${c.trend || 'not selected'}
+- Session phase: ${c.phase || 'not selected'}
+- Volume: ${c.volume || 'not selected'}
+
+ORDER FLOW:
+- DOM/Bid-Ask: ${c.dom || 'not selected'}
+- Delta/Footprint: ${c.delta || 'not selected'}
+- Observed setups: ${c.setups}
+- Candle pattern: ${c.candle || 'not selected'}
+
+MACRO:
+- News events: ${c.news}
+- Market sentiment: ${c.sentiment || 'not selected'}
+
+TRADER STATE (human input):
+- Mental clarity: ${c.mood}
+- Emotional state: ${c.emotion || 'not provided'}
+- Session P&L: ${c.pnl || 'not provided'}
+- Additional notes: ${c.extra || 'none'}
+
+Generate the signal JSON now.`;
+}
+
+// ── LOADING ──
+function showLoading() {
+  const rp = document.getElementById('right-panel');
+  rp.innerHTML = `<div class="loading-state">
+    <div class="scanner-ring"></div>
+    <div class="loading-text">SCANNING MARKET CONDITIONS</div>
+    <div class="loading-steps">
+      Analyzing price structure...<br>
+      Cross-referencing key levels...<br>
+      Evaluating order flow signals...<br>
+      Assessing trader state...<br>
+      Computing signal confidence...
+    </div>
+  </div>`;
+}
+
+// ── RENDER SIGNAL ──
+function renderSignal(s, ctx) {
+  if(s.error) { renderError(s.error); return; }
+
+  const dir = s.direction;
+  const isLong = dir==='LONG', isShort = dir==='SHORT', isNogo = dir==='NO-GO';
+  const bannerClass = isLong?'long':isShort?'short':'nogo';
+  const conf = s.confidence || 0;
+  const confClass = conf>=70?'high':conf>=50?'mid':'low';
+  const circumference = 2 * Math.PI * 36;
+  const offset = circumference - (conf/100)*circumference;
+
+  // History chip
+  const ts = new Date().toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});
+  signals.unshift({dir, setup:s.setup, conf, ts, signal:s, ctx});
+  confList.push(conf);
+  document.getElementById('h-count').textContent = signals.length;
+  document.getElementById('h-conf').textContent = Math.round(confList.reduce((a,b)=>a+b,0)/confList.length)+'%';
+
+  const levelsHTML = isNogo ? '' : `
+  <div class="levels-grid">
+    <div class="level-card entry">
+      <div class="lc-label">ENTRY ZONE</div>
+      <div class="lc-val">${s.entry?.zone || '–'}</div>
+      <div class="lc-sub" style="color:var(--dim);font-size:10px">${s.entry?.entryLogic||''}</div>
+    </div>
+    <div class="level-card stop">
+      <div class="lc-label">STOP LOSS</div>
+      <div class="lc-val">${s.stop?.price||'–'}</div>
+      <div class="lc-sub" style="color:var(--red)">${s.stop?.points||''}pts | ${s.stop?.logic||''}</div>
+    </div>
+    ${(s.targets||[]).map(t=>`
+    <div class="level-card ${t.label.toLowerCase()}">
+      <div class="lc-label">${t.label}</div>
+      <div class="lc-val">${t.price}</div>
+      <div class="lc-sub" style="color:var(--accent2)">${t.rr} · ${t.points}pts</div>
+      <div class="lc-sub" style="color:var(--dim);font-size:9px;margin-top:2px">${t.action||''}</div>
+    </div>`).join('')}
+  </div>`;
+
+  const mgmtHTML = isNogo ? '' : `
+  <div class="info-box">
+    <div class="info-box-title">TRADE MANAGEMENT STEPS</div>
+    <div class="mgmt-steps">
+      ${(s.tradeManagement||[]).map((step,i)=>`
+      <div class="mgmt-step">
+        <div class="step-num">${i+1}</div>
+        <div class="step-text">${step}</div>
+      </div>`).join('')}
+    </div>
+  </div>`;
+
+  const metricsHTML = isNogo ? '' : `
+  <div class="info-box">
+    <div class="info-box-title">SIGNAL METRICS</div>
+    <div class="info-item"><span class="info-key">ENTRY PRICE</span><span class="info-val">${s.entry?.idealEntry||'–'}</span></div>
+    <div class="info-item"><span class="info-key">STOP</span><span class="info-val red">${s.stop?.price||'–'} (${s.stop?.points||'?'}pts)</span></div>
+    <div class="info-item"><span class="info-key">TARGET 1</span><span class="info-val green">${s.targets?.[0]?.price||'–'} (${s.targets?.[0]?.rr||''})</span></div>
+    <div class="info-item"><span class="info-key">TARGET 2</span><span class="info-val green">${s.targets?.[1]?.price||'–'} (${s.targets?.[1]?.rr||''})</span></div>
+    <div class="info-item"><span class="info-key">TARGET 3</span><span class="info-val green">${s.targets?.[2]?.price||'–'} (${s.targets?.[2]?.rr||''})</span></div>
+    <div class="info-item"><span class="info-key">SETUP</span><span class="info-val">${s.setup||'–'}</span></div>
+  </div>`;
+
+  const nogoHTML = isNogo ? `
+  <div class="inval-box" style="border-color:rgba(255,184,0,0.5);background:rgba(255,184,0,0.07)">
+    <div class="info-box-title" style="color:var(--warn)">⛔ NO TRADE — REASON</div>
+    <div class="reasoning-text">${s.noGoReason||'No clear setup present at this time.'}</div>
+  </div>` : '';
+
+  const rp = document.getElementById('right-panel');
+  rp.innerHTML = `
+  <div class="signal-wrap">
+
+    <!-- DIRECTION BANNER -->
+    <div class="dir-banner ${bannerClass}">
+      <div class="dir-main">
+        <div class="dir-label"><span class="live-dot"></span>SIGNAL · ${ts}</div>
+        <div class="dir-value">${dir}</div>
+        <div class="dir-setup">${s.setup||''}</div>
+      </div>
+      <div class="conf-ring">
+        <div class="ring-wrap">
+          <svg class="ring-svg" width="90" height="90" viewBox="0 0 90 90">
+            <circle class="ring-track" cx="45" cy="45" r="36"/>
+            <circle class="ring-fill ${confClass}" cx="45" cy="45" r="36"
+              stroke-dasharray="${circumference}"
+              stroke-dashoffset="${offset}"/>
+          </svg>
+          <div class="ring-center">
+            <div class="conf-pct" style="color:${conf>=70?'var(--accent2)':conf>=50?'var(--warn)':'var(--red)'}">${conf}%</div>
+            <div class="conf-lbl">CONFIDENCE</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    ${nogoHTML}
+    ${levelsHTML}
+
+    <!-- REASONING + MINDSET -->
+    <div class="info-row">
+      <div class="reasoning-box">
+        <div class="info-box-title">AI REASONING</div>
+        <div class="reasoning-text">${s.reasoning||'No reasoning provided.'}</div>
+      </div>
+      <div class="info-box" style="border-left:2px solid ${isNogo?'var(--warn)':'var(--accent)'}">
+        <div class="info-box-title" style="color:var(--warn)">MINDSET CHECK</div>
+        <div class="reasoning-text" style="font-size:13px">${s.mindsetNote||'N/A'}</div>
+      </div>
+    </div>
+
+    <!-- METRICS + MANAGEMENT -->
+    ${!isNogo ? `<div class="info-row">${metricsHTML}${mgmtHTML}</div>` : ''}
+
+    <!-- INVALIDATION -->
+    ${!isNogo ? `
+    <div class="inval-box">
+      <div class="info-box-title">TRADE INVALIDATION — EXIT IF:</div>
+      <ul class="inval-list">
+        ${(s.invalidation||[]).map(i=>`<li>${i}</li>`).join('')}
+      </ul>
+    </div>` : ''}
+
+  </div>
+
+  <!-- HISTORY STRIP -->
+  <div class="history-strip" id="hist-strip">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;color:var(--dim);align-self:center;">HISTORY:</span>
+    ${signals.map((sg,i)=>`<span class="hist-chip ${sg.dir==='LONG'?'long-chip':sg.dir==='SHORT'?'short-chip':'nogo-chip'}" onclick="replaySignal(${i})">${sg.ts} ${sg.dir} ${sg.conf}%</span>`).join('')}
+  </div>`;
+}
+
+function replaySignal(i) {
+  renderSignal(signals[i].signal, signals[i].ctx);
+}
+
+function renderError(msg) {
+  document.getElementById('right-panel').innerHTML = `
+  <div class="idle-state">
+    <div class="idle-icon">⚠️</div>
+    <div class="idle-text" style="color:var(--red)">SIGNAL ERROR</div>
+    <div class="idle-sub">${msg}</div>
+  </div>`;
+}
+</script>
+</body>
+</html>
